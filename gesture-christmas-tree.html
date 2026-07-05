@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎄 3D 散点圣诞树 - Gesture Controlled</title>
+    <style>
+        :root {
+            --bg: #050510;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(ellipse at center, #0d0d2b 0%, #050510 60%, #020208 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* ── Title ── */
+        .title {
+            color: #ffd700;
+            font-size: 1.8rem;
+            font-weight: 700;
+            text-align: center;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5),
+                         0 0 40px rgba(255, 215, 0, 0.3);
+            letter-spacing: 0.05em;
+            z-index: 2;
+            margin-bottom: 4px;
+        }
+
+        /* ── 3D Canvas Container ── */
+        .canvas-container {
+            position: relative;
+            width: min(90vw, 700px);
+            height: min(70vh, 560px);
+            z-index: 1;
+            cursor: grab;
+        }
+        .canvas-container:active {
+            cursor: grabbing;
+        }
+        .canvas-container canvas {
+            display: block;
+        }
+
+        /* ── Gesture Indicator ── */
+        .gesture-indicator {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            color: #ccc;
+            font-size: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            padding: 12px 28px;
+            border-radius: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 2;
+            margin-top: 8px;
+        }
+        .gesture-label {
+            font-size: 0.8em;
+            opacity: 0.6;
+            letter-spacing: 0.04em;
+        }
+        .gesture-bar-track {
+            width: 160px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .gesture-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b, #ffd700, #44ff44);
+            border-radius: 3px;
+            width: 30%;
+        }
+        .gesture-icon {
+            font-size: 1.4rem;
+        }
+
+        /* ── Camera Preview ── */
+        .camera-preview {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 180px;
+            height: 135px;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            background: #111;
+            z-index: 20;
+        }
+        .camera-preview video,
+        .camera-preview canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .camera-label {
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.65rem;
+            z-index: 2;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 2px 10px;
+            border-radius: 10px;
+        }
+
+        /* ── Hint ── */
+        .hint {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.8rem;
+            text-align: center;
+            z-index: 2;
+            margin-top: 6px;
+        }
+
+        /* ── Error Overlay ── */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .overlay.show {
+            display: flex;
+        }
+        .overlay-card {
+            background: #1a1a2e;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 420px;
+            color: #ddd;
+        }
+        .overlay-card h2 {
+            color: #ffd700;
+            margin-bottom: 12px;
+        }
+        .overlay-card p {
+            margin: 8px 0;
+            line-height: 1.6;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        .overlay-card button {
+            margin-top: 20px;
+            padding: 12px 32px;
+            background: linear-gradient(135deg, #ffd700, #ffaa00);
+            color: #1a1a2e;
+            border: none;
+            border-radius: 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .overlay-card button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 24px rgba(255, 215, 0, 0.3);
+        }
+
+        @media (max-width: 600px) {
+            .title {
+                font-size: 1.2rem;
+            }
+            .canvas-container {
+                width: 95vw;
+                height: 50vh;
+            }
+            .camera-preview {
+                width: 120px;
+                height: 90px;
+                bottom: 10px;
+                right: 10px;
+            }
+            .gesture-indicator {
+                padding: 8px 16px;
+                gap: 10px;
+                font-size: 0.8rem;
+            }
+            .gesture-bar-track {
+                width: 80px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Error overlay -->
+    <div class="overlay" id="errorOverlay">
+        <div class="overlay-card">
+            <h2>📷 无法访问摄像头</h2>
+            <p id="errorMessage">请允许浏览器使用摄像头权限。</p>
+            <p style="font-size:0.75rem;opacity:0.5;">需要 HTTPS 或 localhost 才能使用摄像头</p>
+            <button onclick="retryCamera()">🔄 重试</button>
+        </div>
+    </div>
+
+    <!-- Title -->
+    <h1 class="title">🎄 3D 散点圣诞树 🎄</h1>
+
+    <!-- Three.js canvas container -->
+    <div class="canvas-container" id="canvasContainer"></div>
+
+    <!-- Gesture indicator -->
+    <div class="gesture-indicator">
+        <span class="gesture-label">🤏 捏合</span>
+        <div class="gesture-bar-track">
+            <div class="gesture-bar-fill" id="gestureBarFill"></div>
+        </div>
+        <span class="gesture-label">🖐 张开</span>
+        <span class="gesture-icon" id="gestureIcon">✋</span>
+    </div>
+
+    <p class="hint">💡 拇指与食指捏合 = 缩小 &nbsp;|&nbsp; 张开 = 放大 &nbsp;|&nbsp; 🖱 拖拽旋转</p>
+
+    <!-- Camera Preview -->
+    <div class="camera-preview" id="cameraPreview">
+        <video id="video" playsinline autoplay muted></video>
+        <canvas id="handCanvas"></canvas>
+        <span class="camera-label">📷 手势识别</span>
+    </div>
+
+    <!-- ── Libraries ── -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"
+        crossorigin="anonymous"></script>
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.157.0/build/three.module.js" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ────────────────────────────────────
+        // DOM refs
+        // ────────────────────────────────────
+        const container = document.getElementById('canvasContainer');
+        const gestureBarFill = document.getElementById('gestureBarFill');
+        const gestureIcon = document.getElementById('gestureIcon');
+        const errorOverlay = document.getElementById('errorOverlay');
+        const errorMessage = document.getElementById('errorMessage');
+        const video = document.getElementById('video');
+        const handCanvas = document.getElementById('handCanvas');
+        const handCtx = handCanvas.getContext('2d');
+
+        // ────────────────────────────────────
+        // Gesture state
+        // ────────────────────────────────────
+        let targetScale = 1.0;
+        let currentScale = 1.0;
+        let handDetected = false;
+        let lastHandTime = 0;
+        const HAND_TIMEOUT = 2000;
+        const MIN_DIST = 0.04;
+        const MAX_DIST = 0.38;
+        const MIN_SCALE = 0.3;
+        const MAX_SCALE = 2.8;
+        const LERP_SPEED = 0.1;
+
+        // ────────────────────────────────────
+        // Three.js setup
+        // ────────────────────────────────────
+        const scene = new THREE.Scene();
+
+        // Camera
+        const camera = new THREE.PerspectiveCamera(
+            45,
+            container.clientWidth / container.clientHeight,
+            0.1,
+            100
+        );
+        camera.position.set(2, 3.5, 11);
+        camera.lookAt(0, 2.8, 0);
+
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setClearColor(0x000000, 0);
+        container.appendChild(renderer.domElement);
+
+        // ────────────────────────────────────
+        // Glow texture for particles
+        // ────────────────────────────────────
+        function createGlowTexture(innerColor, size = 64) {
+            const c = document.createElement('canvas');
+            c.width = size;
+            c.height = size;
+            const ctx = c.getContext('2d');
+            const half = size / 2;
+            const g = ctx.createRadialGradient(half, half, 0, half, half, half);
+            g.addColorStop(0, 'rgba(255,255,255,1)');
+            g.addColorStop(0.08, innerColor);
+            g.addColorStop(0.4, 'rgba(255,255,255,0.15)');
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, size, size);
+            return new THREE.CanvasTexture(c);
+        }
+
+        const texGreen = createGlowTexture('rgba(30,200,60,0.9)');
+        const texGold = createGlowTexture('rgba(255,210,20,0.95)');
+        const texBrown = createGlowTexture('rgba(140,90,40,0.9)');
+        const texRed = createGlowTexture('rgba(255,60,60,0.9)');
+        const texWhite = createGlowTexture('rgba(220,220,255,0.8)');
+        const texBlue = createGlowTexture('rgba(60,120,255,0.9)');
+        const texPurple = createGlowTexture('rgba(200,80,255,0.9)');
+
+        // ────────────────────────────────────
+        // Helper: create a Points mesh
+        // ────────────────────────────────────
+        function makePoints(positions, colorRGB, size, texture) {
+            const geom = new THREE.BufferGeometry();
+            geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            // Single-color material — no vertexColors needed
+            const mat = new THREE.PointsMaterial({
+                size,
+                map: texture,
+                color: new THREE.Color(colorRGB[0], colorRGB[1], colorRGB[2]),
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                transparent: true,
+            });
+            return new THREE.Points(geom, mat);
+        }
+
+        // ────────────────────────────────────
+        // Tree shape: cone radius at height y
+        // ────────────────────────────────────
+        const TREE_H = 7.5;
+        const MAX_R = 2.6;
+
+        function coneRadius(y) {
+            const t = y / TREE_H; // 0 @ bottom → 1 @ top
+            return MAX_R * Math.pow(1 - t, 0.65);
+        }
+
+        // ────────────────────────────────────
+        // Generate tree spiral (green)
+        // ────────────────────────────────────
+        function genTreeSpiral(count) {
+            const pos = [];
+            const turns = 25;
+            for (let i = 0; i < count; i++) {
+                const t = i / count;
+                const y = t * TREE_H;
+                const r = coneRadius(y) * (0.85 + Math.random() * 0.15);
+                const angle = t * turns * Math.PI * 2;
+                const jitter = 0.12;
+                pos.push(
+                    Math.cos(angle) * r + (Math.random() - 0.5) * jitter,
+                    y + (Math.random() - 0.5) * jitter,
+                    Math.sin(angle) * r + (Math.random() - 0.5) * jitter
+                );
+            }
+            return new Float32Array(pos);
+        }
+
+        // ────────────────────────────────────
+        // Generate tree surface fill (green)
+        // ────────────────────────────────────
+        function genTreeFill(count) {
+            const pos = [];
+            for (let i = 0; i < count; i++) {
+                const y = Math.random() * TREE_H;
+                const maxR = coneRadius(y);
+                // Bias toward surface
+                const r = maxR * (0.6 + Math.random() * 0.4);
+                const angle = Math.random() * Math.PI * 2;
+                pos.push(Math.cos(angle) * r, y, Math.sin(angle) * r);
+            }
+            return new Float32Array(pos);
+        }
+
+        // ────────────────────────────────────
+        // Generate star burst at top (gold)
+        // ────────────────────────────────────
+        function genStar(count) {
+            const pos = [];
+            const cy = TREE_H + 0.3;
+            const coreR = 0.45;
+
+            // Dense core sphere
+            const coreCount = Math.floor(count * 0.5);
+            for (let i = 0; i < coreCount; i++) {
+                const phi = Math.acos(2 * Math.random() - 1);
+                const theta = Math.random() * Math.PI * 2;
+                const r = coreR * Math.cbrt(Math.random());
+                pos.push(
+                    Math.sin(phi) * Math.cos(theta) * r,
+                    cy + Math.cos(phi) * r,
+                    Math.sin(phi) * Math.sin(theta) * r
+                );
+            }
+
+            // 5 rays
+            const rayCount = Math.floor(count * 0.1);
+            for (let ray = 0; ray < 5; ray++) {
+                const baseAngle = (ray / 5) * Math.PI * 2 - Math.PI / 2;
+                const rayLen = coreR * 3.5;
+                for (let i = 0; i < rayCount; i++) {
+                    const t = Math.random();
+                    const r = t * rayLen;
+                    const spread = (1 - t) * 0.2;
+                    pos.push(
+                        Math.cos(baseAngle) * r + (Math.random() - 0.5) * spread,
+                        cy + (Math.random() - 0.5) * spread * 0.4,
+                        Math.sin(baseAngle) * r + (Math.random() - 0.5) * spread
+                    );
+                }
+            }
+
+            // Halo ring
+            const ringCount = Math.floor(count * 0.2);
+            for (let i = 0; i < ringCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const r = coreR * 1.8;
+                pos.push(
+                    Math.cos(angle) * r + (Math.random() - 0.5) * 0.15,
+                    cy + (Math.random() - 0.5) * 0.15,
+                    Math.sin(angle) * r + (Math.random() - 0.5) * 0.15
+                );
+            }
+
+            // Sparkles
+            const sparkCount = Math.floor(count * 0.2);
+            for (let i = 0; i < sparkCount; i++) {
+                const phi = Math.acos(2 * Math.random() - 1);
+                const theta = Math.random() * Math.PI * 2;
+                const r = coreR * 2.5 + Math.random() * 1.5;
+                pos.push(
+                    Math.sin(phi) * Math.cos(theta) * r,
+                    cy + Math.cos(phi) * r * 0.7,
+                    Math.sin(phi) * Math.sin(theta) * r
+                );
+            }
+
+            return new Float32Array(pos);
+        }
+
+        // ────────────────────────────────────
+        // Generate trunk (brown)
+        // ────────────────────────────────────
+        function genTrunk(count) {
+            const pos = [];
+            const trunkH = 0.9;
+            const trunkR = 0.35;
+            for (let i = 0; i < count; i++) {
+                const y = -Math.random() * trunkH;
+                const angle = Math.random() * Math.PI * 2;
+                const r = trunkR * (0.4 + Math.random() * 0.6);
+                pos.push(Math.cos(angle) * r, y, Math.sin(angle) * r);
+            }
+            return new Float32Array(pos);
+        }
+
+        // ────────────────────────────────────
+        // Generate ornaments (colorful, on tree surface)
+        // ────────────────────────────────────
+        function genOrnaments(count) {
+            const groups = [
+                { color: [1, 0.25, 0.25], tex: texRed, count: Math.floor(count * 0.35) },
+                { color: [1, 0.75, 0.15], tex: texGold, count: Math.floor(count * 0.3) },
+                { color: [0.25, 0.5, 1], tex: texBlue, count: Math.floor(count * 0.2) },
+                { color: [0.75, 0.25, 1], tex: texPurple, count: Math.floor(count * 0.15) },
+            ];
+
+            const results = [];
+            for (const g of groups) {
+                const pos = [];
+                for (let i = 0; i < g.count; i++) {
+                    const y = 0.3 + Math.random() * (TREE_H - 0.6);
+                    const r = coneRadius(y) * (0.88 + Math.random() * 0.12);
+                    const angle = Math.random() * Math.PI * 2;
+                    pos.push(Math.cos(angle) * r, y, Math.sin(angle) * r);
+                }
+                results.push({ positions: new Float32Array(pos), color: g.color, tex: g.tex });
+            }
+            return results;
+        }
+
+        // ────────────────────────────────────
+        // Generate snow (white, floating around)
+        // ────────────────────────────────────
+        function genSnow(count) {
+            const pos = [];
+            const snowW = 8;
+            const snowH = 10;
+            const snowD = 8;
+            for (let i = 0; i < count; i++) {
+                pos.push(
+                    (Math.random() - 0.5) * snowW,
+                    -1.5 + Math.random() * snowH,
+                    (Math.random() - 0.5) * snowD
+                );
+            }
+            return new Float32Array(pos);
+        }
+
+        // ────────────────────────────────────
+        // Ground glow ring
+        // ────────────────────────────────────
+        function genGroundGlow(count) {
+            const pos = [];
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const r = 1.5 + Math.random() * 3.5;
+                pos.push(Math.cos(angle) * r, -0.95 + (Math.random() - 0.5) * 0.15, Math.sin(angle) * r);
+            }
+            return new Float32Array(pos);
+        }
+
+        // ────────────────────────────────────
+        // Build the 3D scene
+        // ────────────────────────────────────
+        const treeGroup = new THREE.Group();
+        scene.add(treeGroup);
+
+        // Tree spiral + fill
+        const spiralPts = genTreeSpiral(6000);
+        const fillPts = genTreeFill(5000);
+        const allTreePts = new Float32Array(spiralPts.length + fillPts.length);
+        allTreePts.set(spiralPts);
+        allTreePts.set(fillPts, spiralPts.length);
+        const treeMesh = makePoints(allTreePts, [0.12, 0.72, 0.22], 0.08, texGreen);
+        treeGroup.add(treeMesh);
+
+        // Star
+        const starPts = genStar(1500);
+        const starMesh = makePoints(starPts, [1, 0.82, 0.08], 0.10, texGold);
+        treeGroup.add(starMesh);
+
+        // Trunk
+        const trunkPts = genTrunk(800);
+        const trunkMesh = makePoints(trunkPts, [0.55, 0.32, 0.12], 0.07, texBrown);
+        treeGroup.add(trunkMesh);
+
+        // Ornaments
+        const ornamentGroups = genOrnaments(400);
+        for (const og of ornamentGroups) {
+            const m = makePoints(og.positions, og.color, 0.14, og.tex);
+            treeGroup.add(m);
+        }
+
+        // Ground glow
+        const groundPts = genGroundGlow(1500);
+        const groundMesh = makePoints(groundPts, [0.5, 0.6, 0.8], 0.04, texWhite);
+        treeGroup.add(groundMesh);
+
+        // Snow (separate from treeGroup — doesn't scale with gesture)
+        const snowGroup = new THREE.Group();
+        scene.add(snowGroup);
+        const snowPts = genSnow(2000);
+        const snowMesh = makePoints(snowPts, [0.85, 0.88, 1], 0.06, texWhite);
+        snowGroup.add(snowMesh);
+
+        // ────────────────────────────────────
+        // Mouse drag to rotate
+        // ────────────────────────────────────
+        let isDragging = false;
+        let prevMouse = { x: 0, y: 0 };
+        let rotY = 0; // accumulated rotation Y
+        let rotX = 0.35; // slight tilt
+
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            isDragging = true;
+            prevMouse.x = e.clientX;
+            prevMouse.y = e.clientY;
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - prevMouse.x;
+            const dy = e.clientY - prevMouse.y;
+            rotY += dx * 0.005;
+            rotX += dy * 0.005;
+            rotX = Math.max(-1.2, Math.min(1.5, rotX)); // clamp tilt
+            prevMouse.x = e.clientX;
+            prevMouse.y = e.clientY;
+        });
+
+        window.addEventListener('pointerup', () => { isDragging = false; });
+
+        // Touch support
+        renderer.domElement.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                prevMouse.x = e.touches[0].clientX;
+                prevMouse.y = e.touches[0].clientY;
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchmove', (e) => {
+            if (!isDragging || e.touches.length !== 1) return;
+            const dx = e.touches[0].clientX - prevMouse.x;
+            const dy = e.touches[0].clientY - prevMouse.y;
+            rotY += dx * 0.005;
+            rotX += dy * 0.005;
+            rotX = Math.max(-1.2, Math.min(1.5, rotX));
+            prevMouse.x = e.touches[0].clientX;
+            prevMouse.y = e.touches[0].clientY;
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => { isDragging = false; });
+
+        // ────────────────────────────────────
+        // Draw hand landmarks on preview canvas
+        // ────────────────────────────────────
+        function drawHandResults(results) {
+            handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+            handCtx.drawImage(video, 0, 0, handCanvas.width, handCanvas.height);
+            handCtx.fillStyle = 'rgba(0,0,0,0.3)';
+            handCtx.fillRect(0, 0, handCanvas.width, handCanvas.height);
+
+            if (!results.multiHandLandmarks || !results.multiHandLandmarks.length) return;
+
+            const lm = results.multiHandLandmarks[0];
+            const w = handCanvas.width;
+            const h = handCanvas.height;
+
+            // Connections
+            const conns = [
+                [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+                [0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],
+                [0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17]
+            ];
+            handCtx.strokeStyle = 'rgba(100,200,255,0.5)';
+            handCtx.lineWidth = 1.2;
+            for (const [a, b] of conns) {
+                handCtx.beginPath();
+                handCtx.moveTo(lm[a].x * w, lm[a].y * h);
+                handCtx.lineTo(lm[b].x * w, lm[b].y * h);
+                handCtx.stroke();
+            }
+
+            // Dots
+            for (let i = 0; i < lm.length; i++) {
+                handCtx.beginPath();
+                handCtx.arc(lm[i].x * w, lm[i].y * h, i === 4 || i === 8 ? 5 : 2.5, 0, Math.PI * 2);
+                handCtx.fillStyle = i === 4 || i === 8 ? '#ffd700' : 'rgba(255,255,255,0.7)';
+                handCtx.shadowColor = i === 4 || i === 8 ? '#ffd700' : 'transparent';
+                handCtx.shadowBlur = i === 4 || i === 8 ? 8 : 0;
+                handCtx.fill();
+            }
+            handCtx.shadowBlur = 0;
+
+            // Pinch line
+            const tx = lm[4].x * w, ty = lm[4].y * h;
+            const ix = lm[8].x * w, iy = lm[8].y * h;
+            handCtx.strokeStyle = '#ffd700';
+            handCtx.lineWidth = 2;
+            handCtx.setLineDash([5, 3]);
+            handCtx.beginPath();
+            handCtx.moveTo(tx, ty);
+            handCtx.lineTo(ix, iy);
+            handCtx.stroke();
+            handCtx.setLineDash([]);
+
+            const midX = (tx + ix) / 2, midY = (ty + iy) / 2 - 12;
+            const dist = Math.sqrt((lm[4].x - lm[8].x) ** 2 + (lm[4].y - lm[8].y) ** 2);
+            handCtx.fillStyle = '#ffd700';
+            handCtx.font = 'bold 10px monospace';
+            handCtx.textAlign = 'center';
+            handCtx.fillText(`${dist.toFixed(3)}`, midX, midY);
+        }
+
+        // ────────────────────────────────────
+        // MediaPipe: process hand results
+        // ────────────────────────────────────
+        function onHandResults(results) {
+            drawHandResults(results);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const lm = results.multiHandLandmarks[0];
+                const dist = Math.sqrt((lm[4].x - lm[8].x) ** 2 + (lm[4].y - lm[8].y) ** 2);
+                const clamped = Math.max(MIN_DIST, Math.min(MAX_DIST, dist));
+                const t = (clamped - MIN_DIST) / (MAX_DIST - MIN_DIST);
+                targetScale = MIN_SCALE + t * (MAX_SCALE - MIN_SCALE);
+                handDetected = true;
+                lastHandTime = performance.now();
+
+                const pct = Math.round(t * 100);
+                gestureBarFill.style.width = pct + '%';
+                if (t < 0.25) gestureIcon.textContent = '🤏';
+                else if (t < 0.5) gestureIcon.textContent = '✋';
+                else if (t < 0.75) gestureIcon.textContent = '🖐️';
+                else gestureIcon.textContent = '🖖';
+            } else {
+                if (handDetected && performance.now() - lastHandTime > HAND_TIMEOUT) {
+                    handDetected = false;
+                }
+            }
+        }
+
+        // ────────────────────────────────────
+        // Initialize MediaPipe
+        // ────────────────────────────────────
+        const hands = new Hands({
+            locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`,
+        });
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.5,
+        });
+        hands.onResults(onHandResults);
+
+        // ────────────────────────────────────
+        // Start camera
+        // ────────────────────────────────────
+        let cameraInstance = null;
+
+        async function startCamera() {
+            try {
+                handCanvas.width = 180;
+                handCanvas.height = 135;
+                cameraInstance = new Camera(video, {
+                    onFrame: async () => { await hands.send({ image: video }); },
+                    width: 640,
+                    height: 480,
+                    facingMode: 'user',
+                });
+                await cameraInstance.start();
+                errorOverlay.classList.remove('show');
+                console.log('✅ Camera + MediaPipe ready');
+            } catch (err) {
+                console.error('Camera error:', err);
+                let msg = '摄像头启动失败。';
+                if (err.name === 'NotAllowedError') msg = '摄像头权限被拒绝，请在浏览器设置中允许后刷新。';
+                else if (err.name === 'NotFoundError') msg = '未找到摄像头设备。';
+                errorMessage.textContent = msg;
+                errorOverlay.classList.add('show');
+            }
+        }
+
+        window.retryCamera = () => {
+            errorOverlay.classList.remove('show');
+            startCamera();
+        };
+
+        // ────────────────────────────────────
+        // Animation / render loop
+        // ────────────────────────────────────
+        const AUTO_ROTATE_SPEED = 0.004;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Smooth scale
+            currentScale += (targetScale - currentScale) * LERP_SPEED;
+            if (!handDetected && performance.now() - lastHandTime > HAND_TIMEOUT) {
+                targetScale = 1.0;
+            }
+            treeGroup.scale.setScalar(currentScale);
+
+            // Auto-rotate (only when not dragging)
+            if (!isDragging) {
+                rotY += AUTO_ROTATE_SPEED;
+            }
+
+            // Apply rotation to tree group
+            treeGroup.rotation.y = rotY;
+            treeGroup.rotation.x = rotX;
+
+            // Gentle snow drift
+            snowGroup.rotation.y += 0.0008;
+            snowGroup.position.y = Math.sin(performance.now() * 0.0005) * 0.3;
+
+            // Update gesture bar
+            const barPct = ((currentScale - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)) * 100;
+            gestureBarFill.style.width = Math.max(0, Math.min(100, barPct)) + '%';
+
+            renderer.render(scene, camera);
+        }
+
+        // ────────────────────────────────────
+        // Handle resize
+        // ────────────────────────────────────
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        // ────────────────────────────────────
+        // Boot
+        // ────────────────────────────────────
+        function init() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                errorMessage.textContent = '浏览器不支持摄像头，请使用 Chrome/Edge/Firefox。';
+                errorOverlay.classList.add('show');
+                return;
+            }
+            startCamera();
+            requestAnimationFrame(animate);
+        }
+
+        if (typeof Hands === 'undefined' || typeof Camera === 'undefined') {
+            window.addEventListener('load', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
